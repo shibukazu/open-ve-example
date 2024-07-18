@@ -1,19 +1,63 @@
-import { useState, ChangeEvent, FormEvent } from "react";
+import { useState, ChangeEvent, FormEvent, FocusEvent } from "react";
 import { Container, TextField, Button, Typography } from "@mui/material";
 import axios from "axios";
 
 const App = () => {
   const [price, setPrice] = useState<string>("");
+  const [isPriceValid, setIsPriceValid] = useState<boolean>(false);
   const [image, setImage] = useState<File | null>(null);
+  const [isImageValid, setIsImageValid] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
 
-  const handlePriceChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handlePriceChange = async (e: FocusEvent<HTMLInputElement>) => {
     setPrice(e.target.value);
+    const response = await axios.post("http://localhost:8080/v1/check", {
+      id: "price",
+      variables: {
+        number: {
+          "@type": "type.googleapis.com/google.protobuf.Int64Value",
+          value: e.target.value === "" ? 0 : parseInt(e.target.value, 10),
+        },
+      },
+    });
+    if (response.data.isValid) {
+      setIsPriceValid(true);
+    } else {
+      setIsPriceValid(false);
+    }
   };
 
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setImage(e.target.files[0]);
+      const file = e.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = async (event) => {
+        if (event.target?.result) {
+          const base64String = btoa(
+            String.fromCharCode(
+              ...new Uint8Array(event.target.result as ArrayBuffer)
+            )
+          );
+          const response = await axios.post("http://localhost:8080/v1/check", {
+            id: "image",
+            variables: {
+              image: {
+                "@type": "type.googleapis.com/google.protobuf.BytesValue",
+                value: base64String,
+              },
+            },
+          });
+          if (response.data.isValid) {
+            setIsImageValid(true);
+          } else {
+            setIsImageValid(false);
+          }
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
     }
   };
 
@@ -35,7 +79,7 @@ const App = () => {
           },
         }
       );
-      setMessage(response.data.message);
+      setMessage("アップロードが成功しました");
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);
@@ -52,13 +96,23 @@ const App = () => {
         <TextField
           label="価格"
           variant="outlined"
-          value={price}
-          onChange={handlePriceChange}
+          onBlur={handlePriceChange}
           fullWidth
           margin="normal"
         />
+        <Typography variant="body2" color={isPriceValid ? "initial" : "error"}>
+          {isPriceValid ? "価格は正常です" : "価格が異常です"}
+        </Typography>
         <input type="file" onChange={handleImageChange} />
-        <Button type="submit" variant="contained" color="primary">
+        <Typography variant="body2" color={isImageValid ? "initial" : "error"}>
+          {isImageValid ? "画像は正常です" : "画像が異常です"}
+        </Typography>
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          disabled={!isPriceValid || !isImageValid}
+        >
           アップロード
         </Button>
       </form>
